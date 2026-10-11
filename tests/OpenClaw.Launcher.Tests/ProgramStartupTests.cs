@@ -311,6 +311,43 @@ public sealed class ProgramStartupTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AgentStartupExplainsLegacyRuntimeOverrideWithoutWindowsUpdate()
+    {
+        Directory.CreateDirectory(Path.Combine(_testDirectory, "app"));
+        await File.WriteAllTextAsync(
+            Path.Combine(_testDirectory, "app", "openclaw.mjs"),
+            "fixture");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        string logPath = Path.Combine(_testDirectory, "logs", "override.log");
+        HostStartup startup = new()
+        {
+            Entrypoint = HostEntrypoint.Agent,
+            CreateDiagnostics = () => HostDiagnosticLog.Create(logPath),
+            BaseDirectory = _testDirectory,
+            Output = output,
+            Error = error,
+            GetPackageFamilyName = () => "OpenClaw.Gateway_fixture",
+            ReadEnvironmentVariable = _ => null,
+            ProbeReadiness = token => MxcReadiness.ProbeAsync(
+                _testDirectory,
+                name => name == MxcRuntimeLocator.RuntimeDirectoryVariable ? @"C:\mxc-0.8" : null,
+                () => MxcReadiness.MinimumHostBuild,
+                (_, _) => throw new InvalidOperationException("A rejected override must not probe the backend."),
+                token)
+        };
+
+        int exitCode = await Program.RunAsync(["--help"], startup);
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("Remove OPENCLAW_MXC_RUNTIME_DIR", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("clawctl setup", error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows Update", error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("newer version of Windows", error.ToString(), StringComparison.Ordinal);
+    }
+
     private HostStartup CreateStartup(
         string logPath,
         TextWriter output,

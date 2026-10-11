@@ -52,8 +52,9 @@ internal static class MxcRuntimeLocator
         if (!string.IsNullOrWhiteSpace(overrideDirectory))
         {
             throw new MxcException(
-                MxcErrorCode.RuntimeUnavailable,
-                $"{RuntimeDirectoryVariable} is not supported by the package-bound SDK provider.");
+                MxcErrorCode.ConfigurationRejected,
+                $"Remove {RuntimeDirectoryVariable} from your environment, open a new terminal, " +
+                "and run `clawctl setup` again. The SDK provider only uses the packaged runtime.");
         }
 
         string directory = Path.GetFullPath(Path.Combine(

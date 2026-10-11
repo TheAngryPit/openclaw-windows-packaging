@@ -40,7 +40,10 @@ internal enum MxcErrorCode
     RuntimeUnavailable,
 
     /// <summary>The runtime produced output this package cannot interpret.</summary>
-    ProtocolViolation
+    ProtocolViolation,
+
+    /// <summary>A caller configuration conflicts with the package-bound runtime.</summary>
+    ConfigurationRejected
 }
 
 [SuppressMessage(

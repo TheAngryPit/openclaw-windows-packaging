@@ -46,7 +46,7 @@ public sealed class MxcRuntimeLocatorTests : IDisposable
                 ? runtimeDirectory
                 : null));
 
-        Assert.Equal(MxcErrorCode.RuntimeUnavailable, exception.Code);
+        Assert.Equal(MxcErrorCode.ConfigurationRejected, exception.Code);
     }
 
     [Fact]
