@@ -131,18 +131,22 @@ internal sealed class WindowsMxcHostTerminal : IMxcHostTerminal
 {
     private readonly bool _isConsoleInput;
     private readonly bool _isConsoleOutput;
-    private readonly bool _isConsoleError;
     private int _inputModeReady;
 
     public WindowsMxcHostTerminal()
     {
         _isConsoleInput = IsConsoleHandle(StdInput);
         _isConsoleOutput = IsConsoleHandle(StdOutput);
-        _isConsoleError = IsConsoleHandle(StdError);
     }
 
-    public bool IsInteractive =>
-        _isConsoleInput && _isConsoleOutput && _isConsoleError;
+    internal static bool IsPtyAvailable(
+        bool isConsoleInput,
+        bool isConsoleOutput) =>
+        isConsoleInput && isConsoleOutput;
+
+    public bool IsInteractive => IsPtyAvailable(
+        _isConsoleInput,
+        _isConsoleOutput);
 
     [SuppressMessage(
         "Reliability",
@@ -153,7 +157,7 @@ internal sealed class WindowsMxcHostTerminal : IMxcHostTerminal
         nint input = Native.GetStdHandle(StdInput);
         if (!IsInteractive || input == 0 || input == InvalidHandleValue)
         {
-            throw new InvalidOperationException("A PTY requires console input, output, and error handles.");
+            throw new InvalidOperationException("A PTY requires console input and output handles.");
         }
 
         IDisposable capture = WindowsHostConsole.Instance.Capture(_ => { });
@@ -624,7 +628,6 @@ internal sealed class WindowsMxcHostTerminal : IMxcHostTerminal
 
     private const uint StdInput = unchecked((uint)-10);
     private const uint StdOutput = unchecked((uint)-11);
-    private const uint StdError = unchecked((uint)-12);
     private const int DuplicateSameAccess = 0x00000002;
     private const int EnableLineInput = 0x0002;
     private const int EnableEchoInput = 0x0004;

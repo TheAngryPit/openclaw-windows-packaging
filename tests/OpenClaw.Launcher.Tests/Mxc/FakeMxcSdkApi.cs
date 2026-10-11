@@ -5,6 +5,9 @@ namespace OpenClaw.Launcher.Tests.Mxc;
 
 internal sealed class FakeMxcSdkApi : IMxcSdkApi
 {
+    private readonly TaskCompletionSource<string> _dispatchStarted = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+
     public string NativeVersion { get; set; } = "fixture";
     public PlatformSupport Support { get; set; } = new() { IsSupported = true };
     public IReadOnlyList<AvailableBackend> Backends { get; set; } = [];
@@ -15,6 +18,7 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
     public ProvisionRequest? ProvisionRequest { get; private set; }
     public ContainerId? LastContainerId { get; private set; }
     public List<string> Calls { get; } = [];
+    public Task<string> DispatchStarted => _dispatchStarted.Task;
     public ProvisionResult ProvisionResult { get; set; } = new()
     {
         ContainerId = new ContainerId("iso:minted"),
@@ -32,28 +36,28 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
     public PlatformSupport GetPlatformSupport()
     {
         ThrowIfFailed();
-        Calls.Add("probe");
+        RecordCall("probe");
         return Support;
     }
 
     public IReadOnlyList<AvailableBackend> GetAvailableBackends()
     {
         ThrowIfFailed();
-        Calls.Add("available-backends");
+        RecordCall("available-backends");
         return Backends;
     }
 
     public ProvisionResult ProvisionContainer(ProvisionRequest request)
     {
         ThrowIfFailed();
-        Calls.Add("provision");
+        RecordCall("provision");
         ProvisionRequest = request;
         return ProvisionResult;
     }
 
     public LifecycleResult StartContainer(ContainerId id)
     {
-        Calls.Add("start");
+        RecordCall("start");
         LastContainerId = id;
         ThrowIfFailed();
         if (_startCount++ >= StartsBeforeFailure && StartFailures.TryDequeue(out Exception? failure))
@@ -66,7 +70,7 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
     public IMxcProcess SpawnInContainer(ContainerId id, ExecutionRequest request)
     {
         ThrowIfFailed();
-        Calls.Add("exec");
+        RecordCall("exec");
         LastContainerId = id;
         LastExecutionRequest = request;
         return Process;
@@ -78,7 +82,7 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
         MxcPtySize size)
     {
         ThrowIfFailed();
-        Calls.Add("exec-pty");
+        RecordCall("exec-pty");
         LastContainerId = id;
         LastExecutionRequest = request;
         PtySize = size;
@@ -90,7 +94,7 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
     public LifecycleResult StopContainer(ContainerId id)
     {
         ThrowIfFailed();
-        Calls.Add("stop");
+        RecordCall("stop");
         LastContainerId = id;
         return new LifecycleResult();
     }
@@ -98,7 +102,7 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
     public LifecycleResult DeprovisionContainer(ContainerId id)
     {
         ThrowIfFailed();
-        Calls.Add("deprovision");
+        RecordCall("deprovision");
         LastContainerId = id;
         return new LifecycleResult();
     }
@@ -109,6 +113,12 @@ internal sealed class FakeMxcSdkApi : IMxcSdkApi
         {
             throw Failure;
         }
+    }
+
+    private void RecordCall(string call)
+    {
+        Calls.Add(call);
+        _dispatchStarted.TrySetResult(call);
     }
 }
 

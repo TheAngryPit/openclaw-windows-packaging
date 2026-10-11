@@ -391,7 +391,7 @@ public sealed class MxcSdkSessionClientTests
             SandboxId,
             new MxcExecutionRequest("helper.exe"),
             cancellation.Token);
-        await WaitForCallAsync(sdk, "exec");
+        Assert.Equal("exec", await sdk.DispatchStarted.WaitAsync(TimeSpan.FromSeconds(2)));
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
@@ -467,7 +467,7 @@ public sealed class MxcSdkSessionClientTests
             SandboxId,
             new MxcExecutionRequest("helper.exe"),
             cancellation.Token);
-        await WaitForCallAsync(sdk, "exec");
+        Assert.Equal("exec", await sdk.DispatchStarted.WaitAsync(TimeSpan.FromSeconds(2)));
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
@@ -528,6 +528,48 @@ public sealed class MxcSdkSessionClientTests
     }
 
     [Fact]
+    public async Task ForegroundAliasStderrProxyDoesNotDisableSdkPty()
+    {
+        var terminal = new FakeMxcHostTerminal(
+            interactive: WindowsMxcHostTerminal.IsPtyAvailable(
+                isConsoleInput: true,
+                isConsoleOutput: true));
+        var sdk = new FakeMxcSdkApi { PtyProcess = new FakeMxcPtySession("interactive output") };
+        var client = CreateClient(sdk, terminal);
+
+        await client.ExecuteAttachedAsync(
+            SandboxId,
+            new MxcExecutionRequest("helper.exe"),
+            CancellationToken.None);
+
+        Assert.Equal(["exec-pty"], sdk.Calls);
+        Assert.True(terminal.EnteredPtyMode);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task RedirectedInputOrOutputKeepsAttachedExecutionOnPipes(
+        bool isConsoleInput,
+        bool isConsoleOutput)
+    {
+        var terminal = new FakeMxcHostTerminal(
+            interactive: WindowsMxcHostTerminal.IsPtyAvailable(
+                isConsoleInput,
+                isConsoleOutput));
+        var sdk = new FakeMxcSdkApi();
+        var client = CreateClient(sdk, terminal);
+
+        await client.ExecuteAttachedAsync(
+            SandboxId,
+            new MxcExecutionRequest("helper.exe"),
+            CancellationToken.None);
+
+        Assert.Equal(["exec"], sdk.Calls);
+        Assert.False(terminal.EnteredPtyMode);
+    }
+
+    [Fact]
     public async Task CancellationKillsWaitsAndDisposesInteractivePty()
     {
         var pty = new FakeMxcPtySession(completeImmediately: false);
@@ -539,7 +581,7 @@ public sealed class MxcSdkSessionClientTests
             SandboxId,
             new MxcExecutionRequest("helper.exe"),
             cancellation.Token);
-        await WaitForCallAsync(sdk, "exec-pty");
+        Assert.Equal("exec-pty", await sdk.DispatchStarted.WaitAsync(TimeSpan.FromSeconds(2)));
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
@@ -623,15 +665,6 @@ public sealed class MxcSdkSessionClientTests
         FakeMxcSdkApi sdk,
         FakeMxcHostTerminal? terminal = null) =>
         new(Runtime, sdk, terminal ?? new FakeMxcHostTerminal());
-
-    private static async Task WaitForCallAsync(FakeMxcSdkApi sdk, string call)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        while (!sdk.Calls.Contains(call, StringComparer.Ordinal))
-        {
-            await Task.Delay(1, timeout.Token).ConfigureAwait(false);
-        }
-    }
 
     private sealed class FailingReadStream : Stream
     {
