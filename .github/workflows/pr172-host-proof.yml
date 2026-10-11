@@ -1,0 +1,102 @@
+name: PR172 isolated recovery proof
+on:
+  workflow_dispatch:
+  push:
+    branches: [qa/pr172-recovery-dispatch-20261011]
+    paths: [.github/workflows/pr172-host-proof.yml]
+permissions:
+  contents: read
+jobs:
+  host:
+    if: github.repository == 'TheAngryPit/openclaw-windows-packaging'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+      PRODUCT_SHA: 2d050e0beeba79bcf8c5d526b3dbc094638276e5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact product and workflow-only overlay
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -cne 'refs/heads/qa/pr172-recovery-dispatch-20261011') { throw 'Unexpected QA ref' }
+          $parent = (git rev-parse HEAD^).Trim()
+          if ($LASTEXITCODE -ne 0 -or $parent -cne $env:PRODUCT_SHA) { throw 'QA parent mismatch' }
+          $delta = @(git diff --name-only $env:PRODUCT_SHA HEAD)
+          if ($LASTEXITCODE -ne 0 -or $delta.Count -ne 1 -or $delta[0] -cne '.github/workflows/pr172-host-proof.yml') { throw 'Unexpected product edits' }
+          New-Item -ItemType Directory -Force TestResults | Out-Null
+          "product=$env:PRODUCT_SHA;qa=$env:GITHUB_SHA;runner=$env:RUNNER_OS/$env:RUNNER_ARCH" | Out-File TestResults/source.txt -Encoding utf8
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - name: Restore
+        shell: pwsh
+        run: |
+          dotnet restore ./OpenClaw.Gateway.MSIX.slnx
+          if ($LASTEXITCODE -ne 0) { throw 'Restore failed' }
+      - name: Prove wrong recovery on baseline owners and restore candidate
+        shell: pwsh
+        run: |
+          $owners = @('src/OpenClaw.Launcher/Mxc/MxcRuntimeLocator.cs', 'src/OpenClaw.Launcher/Mxc/MxcReadiness.cs', 'src/OpenClaw.Launcher/Session/SessionSupportPolicy.cs')
+          try {
+            git restore --source f0ee2298c6f23ca11e776b8c3fdf0307c79a2db7 -- $owners
+            if ($LASTEXITCODE -ne 0) { throw 'Baseline substitution failed' }
+            dotnet test tests/OpenClaw.Launcher.Tests -c Release --no-restore --filter 'FullyQualifiedName~AgentStartupExplainsLegacyRuntimeOverrideWithoutWindowsUpdate' --logger 'trx;LogFileName=baseline.trx' --results-directory TestResults/Baseline
+            $baselineExit = $LASTEXITCODE
+            [xml]$trx = Get-Content TestResults/Baseline/baseline.trx -Raw
+            $c = $trx.SelectSingleNode('//*[local-name()="Counters"]')
+            $failed = @($trx.TestRun.Results.UnitTestResult | Where-Object outcome -eq Failed)
+            if ($baselineExit -eq 0 -or $c.GetAttribute('total') -ne '1' -or $c.GetAttribute('failed') -ne '1' -or $c.GetAttribute('notExecuted') -ne '0' -or $failed.Count -ne 1) { throw 'Baseline did not reproduce the recovery defect' }
+            if ([string]$failed[0].Output.ErrorInfo.Message -notmatch 'Remove OPENCLAW_MXC_RUNTIME_DIR') { throw 'Baseline failed for an unrelated reason' }
+          } finally {
+            git restore --source $env:PRODUCT_SHA -- $owners
+            if ($LASTEXITCODE -ne 0) { throw 'Candidate restore failed' }
+            git diff --exit-code $env:PRODUCT_SHA -- $owners
+            if ($LASTEXITCODE -ne 0) { throw 'Restored owners differ' }
+          }
+      - name: Canonical Release quality gate
+        id: quality
+        shell: pwsh
+        run: ./scripts/Test-DotNetQuality.ps1 -Configuration Release -SkipRestore
+      - name: Full Release host suite
+        shell: pwsh
+        run: |
+          dotnet test ./OpenClaw.Gateway.MSIX.slnx --configuration Release --no-restore --blame-hang-timeout 3min --blame-hang-dump-type mini --results-directory TestResults/Candidate --logger 'trx;LogFileName=host.trx'
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate tests failed' }
+          $files = @(Get-ChildItem TestResults/Candidate -Filter '*.trx' -Recurse)
+          if ($files.Count -eq 0) { throw 'No candidate receipts' }
+          foreach ($file in $files) {
+            [xml]$trx = Get-Content $file.FullName -Raw
+            $c = $trx.SelectSingleNode('//*[local-name()="Counters"]')
+            if ([int]$c.GetAttribute('total') -le 0 -or $c.GetAttribute('passed') -ne $c.GetAttribute('total') -or $c.GetAttribute('failed') -ne '0' -or $c.GetAttribute('notExecuted') -ne '0') { throw "Incomplete candidate proof: $($file.Name)" }
+          }
+      - name: NativeAOT command-line proof
+        if: ${{ !cancelled() && steps.quality.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/Test-NativeAotCli.Tests.ps1 -Configuration Release
+      - name: MXC packaging input contract
+        if: ${{ !cancelled() && steps.quality.outcome == 'success' }}
+        shell: pwsh
+        run: ./scripts/Test-Get-MxcRuntime.Tests.ps1
+      - name: Verify tracked source cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          git diff --exit-code HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Tracked source changes remain' }
+      - name: Upload receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr172-recovery-proof-${{ github.run_id }}
+          path: TestResults
+          if-no-files-found: error
+          retention-days: 7
