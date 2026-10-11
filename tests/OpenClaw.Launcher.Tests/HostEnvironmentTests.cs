@@ -73,13 +73,15 @@ public sealed class HostEnvironmentTests : IDisposable
         string overrideDirectory = Path.Combine(_root, "experiment");
         StageMxcRuntime(overrideDirectory, provenance: false);
 
-        Assert.Equal(
-            $"unavailable ({MxcRuntimeLocator.RuntimeDirectoryVariable} is not supported by the package-bound SDK provider.)",
-            HostEnvironment.DescribeMxc(
-                _root,
-                name => name == MxcRuntimeLocator.RuntimeDirectoryVariable
-                    ? overrideDirectory
-                    : null));
+        string description = HostEnvironment.DescribeMxc(
+            _root,
+            name => name == MxcRuntimeLocator.RuntimeDirectoryVariable
+                ? overrideDirectory
+                : null);
+
+        Assert.StartsWith("unavailable (", description, StringComparison.Ordinal);
+        Assert.Contains("Remove OPENCLAW_MXC_RUNTIME_DIR", description, StringComparison.Ordinal);
+        Assert.DoesNotContain(overrideDirectory, description, StringComparison.Ordinal);
     }
 
     [Fact]
