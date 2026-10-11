@@ -4,27 +4,30 @@
     "archive integrity, the per-file SHA-256 values, and the PE machine type",
     "are all verified before any file is staged into the package.",
     "",
-    "The official CLI owns the IsolationSession lifecycle and console relay.",
+    "The official NuGet SDK owns the IsolationSession lifecycle contract.",
     "PLM and other backend helpers are not part of this session runtime.",
     "",
-    "'wireSchemaVersion' pins the stable executor configuration schema.",
-    "Lifecycle operations and opaque container IDs use CLI arguments.",
-    "The archive release and configuration schema are separate trust inputs."
+    "The SDK supplies typed lifecycle operations and opaque container IDs.",
+    "Only the IsolationSession native library and license are staged."
   ],
-  "package": "@microsoft/mxc-sdk",
+  "package": "Microsoft.Mxc.Sdk",
   "version": "1.0.0",
-  "wireSchemaVersion": "1.0.0",
   "minimumWindowsBuild": "26340.9212",
-  "tarballUrl": "https://registry.npmjs.org/@microsoft/mxc-sdk/-/mxc-sdk-1.0.0.tgz",
-  "tarballIntegrity": "sha512-7aVR+GHVKveIknZmUtkAEFwUBp61qgEmhJRe1ZyKHJ274yWlKWB/ZfDP/u/whfmDyck0wRNKZN49atlF+SZt2Q==",
+  "archiveUrl": "https://api.nuget.org/v3-flatcontainer/microsoft.mxc.sdk/1.0.0/microsoft.mxc.sdk.1.0.0.nupkg",
+  "archiveIntegrity": "sha512-nhcijA/FWtftNHIoBHMOtl6eoTTIaNEYTK6Vg2SApIfIbdEwbPPEs48Jp9IDNglNV3X4qdL77IN2GQMtHy0KLA==",
+  "managedAssembly": {
+    "path": "lib/net8.0/Microsoft.Mxc.Sdk.dll",
+    "length": 428864,
+    "sha256": "05ada5e94be2e2a374cc9e8aebe04776cb21f7b680ae1dfd460a83a9f527798f"
+  },
   "architectures": {
     "x64": {
       "files": [
         {
-          "archivePath": "package/bin/x64/wxc-exec.exe",
-          "stagedPath": "wxc-exec.exe",
-          "length": 12002664,
-          "sha256": "8a6d1db4dd1846981127d9014741be18b094d07be967765dff6754bda1d40259",
+          "archivePath": "runtimes/win-x64/native/mxc_ffi.dll",
+          "stagedPath": "mxc_ffi.dll",
+          "length": 5957952,
+          "sha256": "56b152836698771fbe56d2ab8be72f2f619031601dd2f00188b95c0fec2a53de",
           "peMachine": "0x8664"
         }
       ]
@@ -32,10 +35,10 @@
     "arm64": {
       "files": [
         {
-          "archivePath": "package/bin/arm64/wxc-exec.exe",
-          "stagedPath": "wxc-exec.exe",
-          "length": 5810496,
-          "sha256": "a1dc1218e26dfae2e463ebede99591ab9b4adcc4efe5d09cc3302b053997244e",
+          "archivePath": "runtimes/win-arm64/native/mxc_ffi.dll",
+          "stagedPath": "mxc_ffi.dll",
+          "length": 4908352,
+          "sha256": "d126058c92329e07e3559adae956b26ba32ed611791f62270837e1e641141699",
           "peMachine": "0xaa64"
         }
       ]
@@ -43,7 +46,7 @@
   },
   "licenseFiles": [
     {
-      "archivePath": "package/LICENSE.md",
+      "archivePath": "LICENSE.md",
       "stagedPath": "LICENSE.md",
       "length": 1140,
       "sha256": "d9a1b1e30d633d5732ea18e3cba9538d293ebc53e1a9e4e96ab739e0c5c4f1cb"

@@ -54,7 +54,7 @@ public sealed class HostEnvironmentTests : IDisposable
     }
 
     [Fact]
-    public void TheStagedMxcRuntimeIsNamedByItsProvenanceAndWireSchema()
+    public void TheStagedMxcRuntimeIsNamedByItsSdkProvenance()
     {
         StageMxcRuntime(Path.Combine(
             _root,
@@ -63,21 +63,18 @@ public sealed class HostEnvironmentTests : IDisposable
             provenance: true);
 
         Assert.Equal(
-            $"@microsoft/mxc-sdk 0.8.0 {MxcRuntimeLocator.CurrentArchitectureName()}, " +
-            $"wire {MxcWireProtocol.IsolationSessionSchemaVersion}",
+            $"Microsoft.Mxc.Sdk 1.0.0 {MxcRuntimeLocator.CurrentArchitectureName()}",
             HostEnvironment.DescribeMxc(_root, _ => null));
     }
 
     [Fact]
-    public void AnOverriddenMxcRuntimeNamesWhereItCameFrom()
+    public void ALegacyMxcRuntimeOverrideIsRejected()
     {
         string overrideDirectory = Path.Combine(_root, "experiment");
         StageMxcRuntime(overrideDirectory, provenance: false);
 
         Assert.Equal(
-            "runtime of unknown provenance, " +
-            $"wire {MxcWireProtocol.IsolationSessionSchemaVersion}, " +
-            $"overridden by {MxcRuntimeLocator.RuntimeDirectoryVariable} to {overrideDirectory}",
+            $"unavailable ({MxcRuntimeLocator.RuntimeDirectoryVariable} is not supported by the package-bound SDK provider.)",
             HostEnvironment.DescribeMxc(
                 _root,
                 name => name == MxcRuntimeLocator.RuntimeDirectoryVariable
@@ -200,14 +197,14 @@ public sealed class HostEnvironmentTests : IDisposable
     private static void StageMxcRuntime(string directory, bool provenance)
     {
         Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, MxcRuntimeLocator.ExecutorFileName), "fixture");
+        File.WriteAllText(Path.Combine(directory, MxcRuntimeLocator.NativeLibraryFileName), "fixture");
         if (provenance)
         {
             string architecture = MxcRuntimeLocator.CurrentArchitectureName();
             File.WriteAllText(
                 Path.Combine(directory, MxcRuntimeLocator.ProvenanceFileName),
                 $$"""
-                {"package":"@microsoft/mxc-sdk","version":"0.8.0","architecture":"{{architecture}}"}
+                {"package":"Microsoft.Mxc.Sdk","version":"1.0.0","architecture":"{{architecture}}"}
                 """);
         }
     }

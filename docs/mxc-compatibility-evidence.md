@@ -1,46 +1,61 @@
 # MXC session runtime and operational evidence
 
 This document describes the packaged isolated-session implementation and the
-observable guarantees it makes. The transport uses the official MXC 1.0 stable
-CLI contract. Source review does not prove that the packaged executable works
-on a Windows host.
+observable guarantees it makes. The transport uses the official
+`Microsoft.Mxc.Sdk` 1.0.0 NuGet SDK. Source review does not prove a complete
+isolated-session lifecycle or compatibility with an existing session.
 
 ## Runtime boundary and MXC seam
 
 The launcher owns a small session contract in
-`OpenClaw.Launcher\Mxc\IMxcSessionClient`. `MxcCliSessionClient` is the current
-implementation. It invokes the pinned `@microsoft/mxc-sdk` CLI and confines
-the stable v1 config and argument format to `MxcWireProtocol` and
-`MxcWireModels`. The rest of the launcher depends on the project-owned
-contract. It does not depend on a preview wire format or a .NET SDK adapter.
+`OpenClaw.Launcher\Mxc\IMxcSessionClient`. `MxcSdkSessionClient` translates
+that contract into Microsoft's typed lifecycle, streaming and PTY APIs.
+Session coordination, persistence, ownership and explicit recovery remain
+with their existing owners. There is one provider, not a selectable CLI
+fallback or a second lifecycle implementation.
 
-## Stable MXC 1.0 CLI contract
+## Official SDK contract and native loading
 
-The authority for this adapter is the official [`v1.0.0` executor source](https://github.com/microsoft/mxc/blob/v1.0.0/src/tools/wxc/src/main.rs), the [stable 1.0 config schema](https://github.com/microsoft/mxc/blob/v1.0.0/schemas/stable/mxc-config.schema.1.0.0.json), and the [container lifecycle reference](https://github.com/microsoft/mxc/blob/v1.0.0/docs/development/architecture/container-lifecycle.md). The package pins the executor archive and schema versions separately in `mxc-runtime.lock.json`.
+The authority is Microsoft's tagged [v1 .NET API](https://github.com/microsoft/mxc/blob/v1.0.0/docs/api-reference/dotnet/v1/api.md) and [SDK source](https://github.com/microsoft/mxc/tree/v1.0.0/sdk/dotnet). The package pins the actual NuGet archive, managed assembly and architecture-specific native library in `mxc-runtime.lock.json`.
 
-Every config uses version `1.0.0`. The CLI receives it with
-`--config-base64` and selects lifecycle routing with `--operation`.
-Provision uses `--operation provision` and omits `--container-id`. Its config
-sets `containment` to `isolation_session`, puts the package identity at
-`isolationSession.provision.appId`, and acknowledges the required unrestricted
-network policy. That policy sets egress default, ingress default, and ingress
-host loopback to `allow`.
+Provision supplies the packaged application identity and acknowledges the
+IsolationSession backend's required unrestricted network policy. This does
+not claim per-command ProcessContainer network isolation. Later operations
+consume the typed opaque container ID rather than reconstructing CLI envelopes.
 
-Start, exec, stop, and deprovision pass their operation and opaque session id
-with `--operation` and `--container-id`. Their config omits `phase`,
-`sandboxId`, `correlationVector`, network policy, and provision-only identity.
-Exec adds only its process command line. Lifecycle tracing identifiers remain
-internal to MXC; this launcher accepts and persists no caller correlation vector.
+`Get-MxcRuntime.ps1` extracts only the allowlisted native library and license
+after verifying the NuGet archive. Compilation checks the restored managed
+assembly against that archive's pin and generates the native identity from
+the same lock. SDK initialization checks the native bytes, holds the file
+against replacement while loading, restricts imported dependencies to Windows
+system DLLs, and binds SDK imports to that mapped image. The SDK's ambient
+override and development search paths do not select the production runtime.
+The former `OPENCLAW_MXC_RUNTIME_DIR` override is explicitly rejected.
 
-Non-exec lifecycle response and error envelopes use standard output. A failed
-exec dispatch writes its error envelope to standard error. The client returns
-raw exec output and exit status. `SessionExecutor` uses the request-matched
-guest helper control result to decide whether the command launched; guest
-output is not a substitute for that result.
+The SDK owns typed lifecycle results and errors. Execution preserves raw guest
+output and exit status. `SessionExecutor` still uses the request-matched guest
+helper control result to decide whether the command launched; guest output is
+not a substitute for that result. Cancelling an SDK await does not stop native
+execution, so invocation cleanup must explicitly terminate and drain the owned
+process without stopping an unrelated process or the persistent session.
 
-The transport's tests use an injected executor and do not launch the packaged
-MXC executable. Existing 0.8 runtime captures remain historical response
-fixtures. They do not prove v1 runtime behavior on this host.
+Captured commands close unused guest stdin before waiting. Attached input EOF
+closes only guest stdin, leaving caller-owned input open. Cancellation or a
+pump failure interrupts all acquired SDK output readers before waiting for
+process and pump cleanup; a descendant holding a pipe cannot keep that cleanup
+waiting for EOF. The first pump failure remains the reported error when caller
+cancellation arrives later. Normal execution still drains complete output.
+Console input uses an owned reader thread that is interrupted and joined before
+console modes are restored. Synthetic boundary tests cover these ordering and
+ownership rules; they do not establish every Windows console host's behavior.
+
+Managed transport tests use an isolated SDK boundary. The NativeAOT driver
+also loads the pinned native library and probes SDK platform support without
+provisioning or changing a session. Neither establishes interactive lifecycle,
+foreign-session rejection or old-to-new session upgrade. Those require a
+compatible disposable Windows account. Opaque IDs must not be rewritten or
+silently replaced to conceal an incompatible upgrade, and agent data must be
+preserved through an accepted recovery procedure.
 
 `OpenClaw.SessionProtocol` is separate from that backend seam. It is the
 versioned, launcher-to-guest request/result contract used for execution,
@@ -234,8 +249,8 @@ setup. The collector does not enumerate arbitrary agent-profile files.
 MXC failures reach the host log with the backend's own evidence: the error
 code, the failing IsolationSession operation (for example
 `IsoSessionOps.StartSessionAsync`), the native status, and any remediation
-text. When the executor produces no interpretable envelope, the failure keeps
-its exit code, executor diagnostics, and a bounded excerpt of its output.
+text. Typed SDK failures retain their backend classification and diagnostic
+context; raw guest output is never parsed as a lifecycle error envelope.
 Both `clawctl setup` and `openclaw` log the evidence behind the support
 decision (host build, runtime provenance, and backend probe result) before
 acting on it, and `clawctl status` logs the MXC failure when the recorded

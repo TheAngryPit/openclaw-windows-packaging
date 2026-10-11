@@ -185,10 +185,6 @@ internal sealed record MxcExecutionResult(
     string StandardOutput,
     string StandardError);
 
-/// <summary>
-/// The MXC lifecycle operations this package requires, independent of the
-/// stable CLI request format used by the current adapter.
-/// </summary>
 internal interface IMxcSessionClient
 {
     Task<MxcProvisionResult> ProvisionAsync(

@@ -109,7 +109,7 @@ internal static class MxcReadiness
             Environment.GetEnvironmentVariable,
             WindowsHostBuild.TryRead,
             static (location, token) =>
-                new MxcCliSessionClient(location).ProbeBackendAsync(token),
+                new MxcSdkSessionClient(location).ProbeBackendAsync(token),
             cancellationToken);
 
     [SuppressMessage(

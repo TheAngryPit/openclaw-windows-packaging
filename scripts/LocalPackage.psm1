@@ -760,7 +760,7 @@ function Test-LocalPackageLayout {
         'openclaw.exe',
         "runtime\$RuntimeArchiveName",
         "session-host\$Architecture\openclaw-session-host.exe",
-        "mxc\$Architecture\wxc-exec.exe",
+        "mxc\$Architecture\mxc_ffi.dll",
         "mxc\$Architecture\mxc-runtime.json",
         'node\native-redirect.mjs'
     )) {
